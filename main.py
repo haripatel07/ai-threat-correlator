@@ -2,6 +2,7 @@ import os
 import joblib
 import pandas as pd
 import random
+import ipaddress
 from src.collector.feed_downloader import download_feed
 from src.collector.log_parser import load_threat_feed, parse_server_log
 
@@ -124,7 +125,18 @@ def run_correlation():
     print("-" * 40)
     
     print("Correlating visitor IPs against threat feed...")
-    matches = visitor_ips.intersection(malicious_ips)
+    matches = set()
+    for visitor_ip in visitor_ips:
+        visitor_ip_obj = ipaddress.ip_address(visitor_ip)
+        for cidr_block in malicious_ips:
+            try:
+                network = ipaddress.ip_network(cidr_block, strict=False)
+                if visitor_ip_obj in network:
+                    matches.add(visitor_ip)
+                    break  # No need to check other blocks for this IP
+            except ValueError:
+                # Skip invalid CIDR blocks
+                continue
     
     if matches:
         print(f"\n[!] Found {len(matches)} match(es) in logs.")
