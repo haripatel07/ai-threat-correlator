@@ -1,5 +1,5 @@
 import re
-import ipaddress # <-- Import the ipaddress module
+import ipaddress
 
 def is_private_ip(ip_str):
     """Checks if an IP address string is in a private range."""
@@ -8,7 +8,6 @@ def is_private_ip(ip_str):
         # Check against known private ranges (RFC 1918)
         return ip.is_private or ip.is_loopback or ip.is_link_local
     except ValueError:
-        # Handle cases where the line might not be a valid IP or network
         return False
 
 def load_threat_feed(feed_path="data/firehol_level1.netset"):
@@ -24,11 +23,8 @@ def load_threat_feed(feed_path="data/firehol_level1.netset"):
                 line = line.strip()
                 # Ignore comments and empty lines
                 if line and not line.startswith("#"):
-                    # --- NEW: Filter out private/reserved IPs ---
                     if not is_private_ip(line):
                         malicious_ips.add(line)
-                    # else:
-                    #     print(f"  > Skipping private/reserved IP: {line}") # Optional: uncomment to see skipped IPs
 
         print(f"Successfully loaded {len(malicious_ips)} public malicious IP entries.")
         return malicious_ips

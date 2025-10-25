@@ -69,18 +69,16 @@ def score_threats(matches):
     # Convert the list of threat data into a DataFrame
     df = pd.DataFrame(threat_data)
     
-    # Ensure the DataFrame has the exact columns the model was trained on,
-    # in the correct order.
     X_predict = df[feature_columns]
     
     # --- AI PREDICTION ---
     severities = model.predict(X_predict)
     
-    # Get the predicted probabilities for a more nuanced score
+    # Get the predicted probabilities 
     probabilities = model.predict_proba(X_predict)
     classes = model.classes_
     
-    # Add results back to our DataFrame
+    # Add results 
     df['severity'] = severities
     # Add a numeric "priority" score for sorting
     df['priority_score'] = [prob[list(classes).index('Critical')] * 100 + \
@@ -133,7 +131,7 @@ def run_correlation():
                 network = ipaddress.ip_network(cidr_block, strict=False)
                 if visitor_ip_obj in network:
                     matches.add(visitor_ip)
-                    break  # No need to check other blocks for this IP
+                    break
             except ValueError:
                 # Skip invalid CIDR blocks
                 continue
@@ -148,18 +146,16 @@ def run_correlation():
     print("\n--- Correlation Complete ---")
 
 if __name__ == "__main__":
-    # Ensure we have the AI model before we start
     if not os.path.exists(MODEL_PATH) or not os.path.exists(COLUMNS_PATH):
         print("Model not found! Running training scripts first...")
         
-        # We must import these here to avoid a circular dependency
         from src.model.generate_dataset import create_dataset
         from src.model.train_model import train_model
         
         create_dataset()
         train_model()
         
-        # Reload the model now that it's built
+        # Reload the model
         try:
             model = joblib.load(MODEL_PATH)
             feature_columns = joblib.load(COLUMNS_PATH)

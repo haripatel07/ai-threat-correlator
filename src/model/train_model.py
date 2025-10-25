@@ -30,12 +30,11 @@ def train_model():
     X = df[features]
     y = df[target]
     
-    # We need to convert text features ('threat_type', 'confidence') into numbers
     # A Pipeline is the best-practice way to do this.
     categorical_features = ['threat_type', 'confidence']
     numeric_features = ['reputation_score', 'recency_days']
     
-    # Create a "preprocessor" to handle feature engineering
+    # Create a preprocessor to handle feature engineering
     preprocessor = ColumnTransformer(
         transformers=[
             ('num', 'passthrough', numeric_features),
