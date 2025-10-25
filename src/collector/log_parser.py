@@ -1,12 +1,20 @@
 import re
+import ipaddress # <-- Import the ipaddress module
+
+def is_private_ip(ip_str):
+    """Checks if an IP address string is in a private range."""
+    try:
+        ip = ipaddress.ip_network(ip_str, strict=False) # Use ip_network to handle CIDR
+        # Check against known private ranges (RFC 1918)
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    except ValueError:
+        # Handle cases where the line might not be a valid IP or network
+        return False
 
 def load_threat_feed(feed_path="data/firehol_level1.netset"):
     """
-    Loads the FireHOL IP feed into a set for fast lookups.
-    It skips comments (lines starting with '#') and empty lines.
-    
-    Returns:
-        set: A set of malicious IP addresses.
+    Loads the FireHOL IP feed into a set, filtering out private IPs.
+    Skips comments and empty lines.
     """
     malicious_ips = set()
     print(f"Loading threat feed from {feed_path}...")
@@ -16,11 +24,15 @@ def load_threat_feed(feed_path="data/firehol_level1.netset"):
                 line = line.strip()
                 # Ignore comments and empty lines
                 if line and not line.startswith("#"):
-                    malicious_ips.add(line)
-        
-        print(f"Successfully loaded {len(malicious_ips)} malicious IP entries.")
+                    # --- NEW: Filter out private/reserved IPs ---
+                    if not is_private_ip(line):
+                        malicious_ips.add(line)
+                    # else:
+                    #     print(f"  > Skipping private/reserved IP: {line}") # Optional: uncomment to see skipped IPs
+
+        print(f"Successfully loaded {len(malicious_ips)} public malicious IP entries.")
         return malicious_ips
-        
+
     except FileNotFoundError:
         print(f"Error: Threat feed file not found at {feed_path}.")
         print("Please run 'python src/collector/feed_downloader.py' first.")
