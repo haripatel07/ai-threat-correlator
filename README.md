@@ -115,3 +115,44 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## Disclaimer
 
 This tool is for educational and research purposes. Always verify threat intelligence from multiple sources and follow your organization's security policies.
+
+## 🚀 Deployment
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Setup
+
+1. Clone the repo
+   ```bash
+   git clone https://github.com/haripatel07/ai-threat-correlator.git
+   cd ai-threat-correlator
+   ```
+2. Copy and configure environment variables
+   ```bash
+   cp .env.example .env
+   # Edit .env to provide any needed values optionally
+   ```
+3. Build and run
+   ```bash
+   docker-compose up --build
+   ```
+
+### Endpoints
+
+The repository now includes FastAPI endpoints to run the correlation workflow and retrieve cached results (redis-backed).
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET    | /health | Health check |
+| POST   | /correlate | Run threat correlation and scoring pipeline |
+| GET    | /threats/latest | Retrieve last scored threat results from Redis cache |
+
+
+## 🏗️ Architecture
+
+Client → CLI runner (main.py) → Threat Correlation Engine (download + parse + correlate) → AI Scoring → (optional Redis layer)
+
+> Note: Redis is not currently integrated into application logic; the docker composition provides a Redis service as a deployment-ready caching/queue option for future extension.

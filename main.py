@@ -1,4 +1,5 @@
 import os
+import json
 import joblib
 import pandas as pd
 import random
@@ -8,20 +9,40 @@ from src.collector.log_parser import load_threat_feed, parse_server_log
 
 # --- CONFIGURATION ---
 MODEL_PATH = "models/threat_scorer.joblib"
-COLUMNS_PATH = "models/feature_columns.joblib"
+COLUMNS_PATH = os.getenv("COLUMNS_PATH", "models/feature_columns.joblib")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
 # --- 1. LOAD THE TRAINED AI MODEL ---
-try:
-    model = joblib.load(MODEL_PATH)
-    feature_columns = joblib.load(COLUMNS_PATH)
-    print("AI threat scoring model loaded successfully.")
-except FileNotFoundError:
-    print(f"Error: Model file not found at {MODEL_PATH}")
-    print("Please run the training scripts in 'src/model/' first.")
-    exit()
-except Exception as e:
-    print(f"Error loading model: {e}")
-    exit()
+model = None
+feature_columns = None
+
+def init_model():
+    global model, feature_columns
+    try:
+        model = joblib.load(MODEL_PATH)
+        feature_columns = joblib.load(COLUMNS_PATH)
+        print("AI threat scoring model loaded successfully.")
+        return True
+    except FileNotFoundError:
+        print(f"Error: Model file not found at {MODEL_PATH}")
+        print("Please run the training scripts in 'src/model/' first.")
+        return False
+    except Exception as e:
+        print(f"Error loading model: {e}")
+        return False
+
+if not init_model():
+    # This is not fatal in API mode; the caller will see explanatory errors.
+    pass
+
+
+def get_redis_client():
+    try:
+        import redis as redis_lib
+        return redis_lib.from_url(REDIS_URL, decode_responses=True)
+    except Exception as e:
+        print(f"Redis not available: {e}")
+        return None
 
 
 def get_threat_context(ip_address):
@@ -52,43 +73,38 @@ def get_threat_context(ip_address):
 def score_threats(matches):
     """
     Uses the loaded AI model to score a list of malicious IPs.
+    Returns a list of threat dictionaries.
     """
+    if model is None or feature_columns is None:
+        raise RuntimeError("AI model is not initialized. Cannot score threats.")
+
     print("-" * 40)
     print("Scoring threats with AI model...")
-    
+
     threat_data = []
     for ip in matches:
         context = get_threat_context(ip)
-        context['ip'] = ip  # Add the IP for reference
+        context['ip'] = ip
         threat_data.append(context)
 
     if not threat_data:
         print("No threats to score.")
-        return
+        return []
 
-    # Convert the list of threat data into a DataFrame
     df = pd.DataFrame(threat_data)
-    
     X_predict = df[feature_columns]
-    
-    # --- AI PREDICTION ---
+
     severities = model.predict(X_predict)
-    
-    # Get the predicted probabilities 
     probabilities = model.predict_proba(X_predict)
     classes = model.classes_
-    
-    # Add results 
+
     df['severity'] = severities
-    # Add a numeric "priority" score for sorting
-    df['priority_score'] = [prob[list(classes).index('Critical')] * 100 + \
-                            prob[list(classes).index('High')] * 50 \
-                            for prob in probabilities]
-    
-    # Sort by priority
+    df['priority_score'] = [prob[list(classes).index('Critical')] * 100 + prob[list(classes).index('High')] * 50 for prob in probabilities]
+
     df_sorted = df.sort_values(by='priority_score', ascending=False)
-    
+
     print("\n--- [!!!] PRIORITIZED THREAT ALERTS [!!!] ---")
+    results = []
     for _, row in df_sorted.iterrows():
         print(f"\n  [ SEVERITY: {row['severity'].upper()} ]")
         print(f"  IP Address:    {row['ip']}")
@@ -96,9 +112,29 @@ def score_threats(matches):
         print(f"  Reputation:    {row['reputation_score']}")
         print(f"  Recency (Days): {row['recency_days']}")
         print(f"  Confidence:    {row['confidence']}")
-    
-    
-def run_correlation():
+
+        results.append({
+            "ip": row['ip'],
+            "threat_type": row['threat_type'],
+            "reputation_score": int(row['reputation_score']),
+            "recency_days": int(row['recency_days']),
+            "confidence": row['confidence'],
+            "severity": row['severity'],
+            "priority_score": float(row['priority_score'])
+        })
+
+    redis_client = get_redis_client()
+    if redis_client:
+        try:
+            redis_client.set("ai_threat_correlator:last_results", json.dumps(results), ex=3600)
+        except Exception as e:
+            print(f"Failed to cache results in Redis: {e}")
+
+    return results
+
+
+def run_correlation(feed_path="data/firehol_level1.netset", log_path="data/sample_nginx.log"):
+
     """
     Main function to run the threat intelligence correlation.
     """
@@ -135,15 +171,21 @@ def run_correlation():
             except ValueError:
                 # Skip invalid CIDR blocks
                 continue
-    
+
     if matches:
         print(f"\n[!] Found {len(matches)} match(es) in logs.")
-        # --- STAGE 5: Score the matches ---
-        score_threats(matches)
+        threat_results = score_threats(matches)
     else:
         print("\n[+] No malicious IPs found in server logs. System clean.")
+        threat_results = []
 
     print("\n--- Correlation Complete ---")
+
+    return {
+        "match_count": len(matches),
+        "matches": list(matches),
+        "threats": threat_results
+    }
 
 if __name__ == "__main__":
     if not os.path.exists(MODEL_PATH) or not os.path.exists(COLUMNS_PATH):
