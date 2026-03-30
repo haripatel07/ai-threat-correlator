@@ -116,7 +116,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 This tool is for educational and research purposes. Always verify threat intelligence from multiple sources and follow your organization's security policies.
 
-## 🚀 Deployment
+## Deployment
 
 ### Prerequisites
 
@@ -151,7 +151,7 @@ The repository now includes FastAPI endpoints to run the correlation workflow an
 | GET    | /threats/latest | Retrieve last scored threat results from Redis cache |
 
 
-## 🏗️ Architecture
+## Architecture
 
 Client → CLI runner (main.py) → Threat Correlation Engine (download + parse + correlate) → AI Scoring → (optional Redis layer)
 
